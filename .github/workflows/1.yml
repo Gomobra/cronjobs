@@ -30,7 +30,7 @@ jobs:
 
 
       - name: Install deps
-        run: pip install -r requirements.txt
+        run: pip install requests
 
       - name: Run bot
         run: python bot.py
