@@ -10,16 +10,17 @@ CAPTCHA_HASH  = "df00e07a0ea0decc7439d0e3effdc5c4"
 
 DAILY_LIMIT  = 850
 HOURLY_LIMIT = 85
-RUN_TARGET   = 85        # exit setelah 85 claim di run ini
-TIME_BUDGET  = 2400      # 40 menit safety (target real ~30 menit)
+RUN_TARGET   = 85
+TIME_BUDGET  = 3300        # 55 menit
 
-MAX_CONSECUTIVE_FAILS = 10
+MAX_CONSECUTIVE_FAILS = 15
 FIXED_DELAY           = 20
-MAX_EARLY_RETRY       = 5
+MAX_EARLY_RETRY       = 4
 EARLY_WAIT            = 15
+STUCK_COOLDOWN        = 45    # jeda setelah complaint sebelum getTask lagi
 
 USERID = "639147"
-TOKEN  = "c604928d58bd82841b120ef0f46861e3"   # <-- update kalau expired
+TOKEN  = "c604928d58bd82841b120ef0f46861e3"
 
 FP = (
     "R1uiSpIgn9rTaoYymse6dg==:9ESFNRJExMjBoXB8DViNKhgWwJD/Pan3zn3ION+4ffR5KwzVLh4ZWxk6n6/hBOMSLi95fKX7MXKo1mUB7l2B/aeazXHKJss3J+FVWG71towOqqL2PP7seqPyo8e295f/edLBaGzn5Q2kbgdbgdBRW5UxK3B+Sn8/SqkhDf44awjTymxCoIC+pw1bKggeCqM/saRj/OwXsX5EFUC+YMv5d2Yi56o5+intl/Q0Qo4e1bsGOe3/ihZkUAci0dH9SIamTuCZKtl+Bh+GcGaARBSmUfYP8ku+PavTxqWHIeH5oq46o2XgG0/dMbI1VH9n1zVAx1ysQQIF6BCTTjdjCrro9ORUCf1L0gCbO/UU4Nrxi198ReaTfPR+BPaEPyDcIvc+/YlqThPaKrL/GOISKl07iw9/eM4nj/MSGHKpK7xaCf9NX2NOpIOMq2GQybAEIj4lFGXuydGbjnjRIOdIKUOEoUpccHUfKkrJLPAlCVS9zhI841eC7wOxYPRRUshJTKD9VNL3eTCxc2vhYsfx3WbCC2x92272z0ztrd8NbvfGxlzPKSNt2bt5HTpR3dEEl9W+Q7nUP8rlePlyjuW2OEOYORh6Q2fleE8Dd57O6PF+D3e/YwsdWaPHyBzR95d2k+Eaa+bNH064HiWQHtK86VjO9q3Cp372swB+snOHZJc/AWwRhJXpSTgwPMnTqVjq9eRxMVYgZgaSxYtp4eosimtJVQk6KcxQR/1djqnXtSo+WKasshDb/12klZdJtbQq11+n7Y6rB36OGkdByscwCQG+cHhymgNZHXLQVQji3JHExqBGLjUilSBWf6Wi0GOC9XqSEsqw5lUKvppN6Avp8BE+3BbCvjMMCGWMCKHchky9HfwlD7L+40HYYTlNcvEXgvCZr7VtR3n9r9AwZKKWSpMf0HUqkZ2QlkHvUkRkoR0BMbmY7J9ijdxbgjI9U2kYzWhM85ALa1vlTVa4mjnBiMo6bgb/+DktAnI77Hle/+cbVwzjbkP/Di2/ohmLHvucdN0+FuE5klXQUwh822Sjk5ekUjvW9hPr7otabaznzkIra8+PZw7HaX+4fz62v5DPw5/Jg7Ba03y8hJVOZHDMAZF9L1LOZbUjdOlBRNKh5TZngdBrc+8HVRH9cSQ3HdCB4SW9Nqp8j9XuAMWfsfz+lL5KGxe0e7DLoWO//FIunvKEi7I4JT9842zaivw15l3jHnKSiSIdFkfRpmDSO2hsJIWuO6PxXeoN2ZfOwxG45qfDOefLk2gbYuQLV9bb1sX4hRQJ6n0VYd3+BhV7ViFoajBuNpNFHXa/miNzgqwhHHo6yrsNiU3RkAZ/TMflemhZb5ENzmwEdqQ5Zx1TEL69/vPXysAFsUHX2uVgAOiEzHWuHRhOeQekQ729AeMaNHX+vfUNLiRVHchW2C4foFCC5xbyHDyNEInIR6xwnvHlxRpN78yDSnUyLaM36TmBZxdYaH/"
@@ -106,6 +107,21 @@ def check_task(task_id):
     return requests.post(URL, headers=headers_(), data=body, timeout=30)
 
 
+def complaint_task(task_id):
+    """Force server release task yang stuck."""
+    body = {
+        "method": "complaint",
+        "error": "same_video_opened",
+        "ads": "",
+        "cause": "1",
+        "captcha_hash": CAPTCHA_HASH,
+        "_v": "1.8",
+        "_meta": CHECK_META,
+        "_sig": CHECK_SIG,
+    }
+    return requests.post(URL, headers=headers_(), data=body, timeout=30)
+
+
 START_TIME = time.time()
 
 
@@ -162,25 +178,28 @@ def main():
             r1 = get_task()
 
             if r1.status_code != 200:
-                log(f"  HTTP {r1.status_code}: {r1.text[:150]}")
-                fails += 1; time.sleep(30); continue
+                log(f"  HTTP {r1.status_code}: {r1.text[:100]}")
+                fails += 1; time.sleep(20); continue
 
             try:
                 j1 = r1.json()
             except ValueError:
-                log(f"  bukan JSON: {r1.text[:150]}")
-                fails += 1; time.sleep(30); continue
+                log(f"  bukan JSON: {r1.text[:100]}")
+                fails += 1; time.sleep(20); continue
 
             if j1.get("status") != "ok":
-                log(f"  getTask status != ok: {j1}")
-                fails += 1; time.sleep(30); continue
+                msg = j1.get("message", "")
+                log(f"  getTask status != ok: {msg}")
+                # Lock wait timeout = server sibuk, retry cepat
+                wait = 10 if "Lock wait" in msg else 30
+                fails += 1; time.sleep(wait); continue
 
             data = j1.get("data") or {}
             task_id = data.get("id")
 
             if not task_id:
                 log(f"  no task id: {data}")
-                fails += 1; time.sleep(30); continue
+                fails += 1; time.sleep(20); continue
 
             log(f"  -> task {task_id}")
 
@@ -199,13 +218,13 @@ def main():
                 r2 = check_task(task_id)
 
                 if r2.status_code != 200:
-                    log(f"  HTTP {r2.status_code}: {r2.text[:150]}")
+                    log(f"  HTTP {r2.status_code}: {r2.text[:100]}")
                     fails += 1; time.sleep(15); break
 
                 try:
                     j2 = r2.json()
                 except ValueError:
-                    log(f"  bukan JSON: {r2.text[:150]}")
+                    log(f"  bukan JSON: {r2.text[:100]}")
                     fails += 1; time.sleep(15); break
 
                 if j2.get("status") == "ok":
@@ -222,13 +241,30 @@ def main():
                     break
 
                 msg = (j2.get("message") or "").lower()
-                if "too early" in msg and attempt < MAX_EARLY_RETRY:
-                    attempt += 1
-                    log(f"  too early, tunggu {EARLY_WAIT}s lalu retry")
-                    time.sleep(EARLY_WAIT)
-                    continue
 
+                # ---- too early handling ----
+                if "too early" in msg:
+                    if attempt < MAX_EARLY_RETRY:
+                        attempt += 1
+                        log(f"  too early, tunggu {EARLY_WAIT}s lalu retry")
+                        time.sleep(EARLY_WAIT)
+                        continue
+                    # Retry habis → task stuck, complaint + cooldown
+                    log(f"  task {task_id} stuck ({MAX_EARLY_RETRY}x too early) → complaint")
+                    try:
+                        rc = complaint_task(task_id)
+                        log(f"  complaint HTTP {rc.status_code}: {rc.text[:80]}")
+                    except Exception as e:
+                        log(f"  complaint error: {e}")
+                    log(f"  cooldown {STUCK_COOLDOWN}s sebelum getTask lagi")
+                    time.sleep(STUCK_COOLDOWN)
+                    fails += 1
+                    break
+
+                # ---- error lain ----
                 log(f"  checkTask status != ok: {j2}")
+                if "Lock wait" in msg:
+                    fails += 1; time.sleep(10); break
                 fails += 1; time.sleep(15)
                 break
 
@@ -237,10 +273,10 @@ def main():
             return
         except requests.exceptions.RequestException as e:
             log(f"Network: {e}")
-            fails += 1; time.sleep(30)
+            fails += 1; time.sleep(20)
         except Exception as e:
             log(f"Error: {e}")
-            fails += 1; time.sleep(30)
+            fails += 1; time.sleep(20)
 
     log(f"SELESAI — total {daily}/{DAILY_LIMIT}, run ini {claimed_this_run} "
         f"dalam {(time.time()-START_TIME)/60:.1f} menit. (exit 0)")
