@@ -2,19 +2,21 @@ import requests
 import time
 import sys
 from collections import deque
-from datetime import datetime
 
 # ==================== KONFIG ====================
 URL           = "https://luckywatch.pro/api/macros/tasks/"
 DASHBOARD_URL = "https://luckywatch.pro/api/macros/dashboard/"
 CAPTCHA_HASH  = "df00e07a0ea0decc7439d0e3effdc5c4"
 
-DAILY_LIMIT = 850
+DAILY_LIMIT  = 850
 HOURLY_LIMIT = 85
+RUN_TARGET   = 85        # exit setelah 85 claim di run ini
+TIME_BUDGET  = 2400      # 40 menit safety (target real ~30 menit)
+
 MAX_CONSECUTIVE_FAILS = 10
-FIXED_DELAY = 20
-MAX_EARLY_RETRY = 5
-EARLY_WAIT = 15
+FIXED_DELAY           = 20
+MAX_EARLY_RETRY       = 5
+EARLY_WAIT            = 15
 
 USERID = "639147"
 TOKEN  = "c604928d58bd82841b120ef0f46861e3"   # <-- update kalau expired
@@ -52,8 +54,11 @@ def wait_for_hourly_slot():
     while True:
         _trim_window()
         if len(TASK_TIMES) < HOURLY_LIMIT:
-            return
+            return True
         wait = 3600 - (time.time() - TASK_TIMES[0]) + 2
+        if (time.time() - START_TIME + wait) >= TIME_BUDGET:
+            log(f"Hourly slot butuh tunggu {wait:.0f}s, tapi udah lewat budget — stop.")
+            return False
         log(f"Hourly limit {len(TASK_TIMES)}/{HOURLY_LIMIT} — tunggu {wait:.0f}s ({wait/60:.1f} menit)...")
         time.sleep(wait)
 
@@ -101,9 +106,17 @@ def check_task(task_id):
     return requests.post(URL, headers=headers_(), data=body, timeout=30)
 
 
+START_TIME = time.time()
+
+
+def over_budget():
+    return (time.time() - START_TIME) >= TIME_BUDGET
+
+
 # ==================== MAIN LOOP ====================
 def main():
-    log(f"Bot start | target {DAILY_LIMIT} video | rate cap {HOURLY_LIMIT}/jam | delay {FIXED_DELAY}s")
+    log(f"Bot start | run target {RUN_TARGET} | daily cap {DAILY_LIMIT} | "
+        f"budget {TIME_BUDGET}s ({TIME_BUDGET/60:.0f}m) | delay {FIXED_DELAY}s")
 
     # ---- sync counter dari server ----
     daily = 0
@@ -122,22 +135,30 @@ def main():
         log(f"Dashboard error ({e}), mulai dari 0")
 
     if daily >= DAILY_LIMIT:
-        log(f"Server udah {daily} >= {DAILY_LIMIT}, stop.")
-        sys.exit(0)
+        log(f"Server udah {daily} >= {DAILY_LIMIT}, stop. (exit 0)")
+        return
 
-    start = time.time()
     fails = 0
+    claimed_this_run = 0
 
     while daily < DAILY_LIMIT:
+        if over_budget():
+            log(f"Time budget habis. Claim run ini: {claimed_this_run}. (exit 0)")
+            return
+        if claimed_this_run >= RUN_TARGET:
+            log(f"Run target {RUN_TARGET} tercapai. Total hari ini: {daily}/{DAILY_LIMIT}. (exit 0)")
+            return
         if fails >= MAX_CONSECUTIVE_FAILS:
-            log(f"{fails} gagal berturut-turut — stop. Cek TOKEN / CAPTCHA_HASH.")
+            log(f"{fails} gagal berturut-turut — stop. Cek TOKEN / CAPTCHA_HASH. (exit 1)")
             sys.exit(1)
 
         try:
-            wait_for_hourly_slot()
+            if not wait_for_hourly_slot():
+                log(f"Time budget habis (nunggu slot). Claim run ini: {claimed_this_run}. (exit 0)")
+                return
 
             # ---- STEP 1: getTask ----
-            log(f"getTask  [{daily}/{DAILY_LIMIT}]")
+            log(f"getTask  [{daily}/{DAILY_LIMIT}] run {claimed_this_run}/{RUN_TARGET}")
             r1 = get_task()
 
             if r1.status_code != 200:
@@ -169,6 +190,10 @@ def main():
             # ---- STEP 3: checkTask (retry kalau "too early") ----
             attempt = 0
             while True:
+                if over_budget():
+                    log(f"Time budget habis di tengah task. Claim run ini: {claimed_this_run}. (exit 0)")
+                    return
+
                 tag = f" (retry {attempt}/{MAX_EARLY_RETRY})" if attempt else ""
                 log(f"  -> checkTask {task_id}{tag}")
                 r2 = check_task(task_id)
@@ -188,10 +213,12 @@ def main():
                     reward  = d.get("reward", "?")
                     balance = d.get("balance", "?")
                     daily += 1
+                    claimed_this_run += 1
                     fails = 0
                     TASK_TIMES.append(time.time())
-                    log(f"  CLAIMED reward={reward} balance={balance} | total {daily}/{DAILY_LIMIT} | "
-                        f"{(time.time()-start)/60:.1f} menit")
+                    log(f"  CLAIMED reward={reward} balance={balance} | "
+                        f"total {daily}/{DAILY_LIMIT} | run {claimed_this_run}/{RUN_TARGET} | "
+                        f"{(time.time()-START_TIME)/60:.1f}m")
                     break
 
                 msg = (j2.get("message") or "").lower()
@@ -206,8 +233,8 @@ def main():
                 break
 
         except KeyboardInterrupt:
-            log(f"Stop manual. Total claim: {daily}")
-            sys.exit(0)
+            log(f"Stop manual. Claim run ini: {claimed_this_run}. (exit 0)")
+            return
         except requests.exceptions.RequestException as e:
             log(f"Network: {e}")
             fails += 1; time.sleep(30)
@@ -215,7 +242,8 @@ def main():
             log(f"Error: {e}")
             fails += 1; time.sleep(30)
 
-    log(f"SELESAI — {daily} video dalam {(time.time()-start)/3600:.2f} jam")
+    log(f"SELESAI — total {daily}/{DAILY_LIMIT}, run ini {claimed_this_run} "
+        f"dalam {(time.time()-START_TIME)/60:.1f} menit. (exit 0)")
 
 
 if __name__ == "__main__":
