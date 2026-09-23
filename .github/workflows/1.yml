@@ -2,9 +2,8 @@ name: LuckyWatch
 
 on:
   schedule:
-    # UTC. 10 run mulai 22:00 UTC (= 05:00 WIB) s/d 07:00 UTC (= 14:00 WIB)
-    - cron: '0 22,23,0,1,2,3,4,5,6,7 * * *'
-  workflow_dispatch:
+    - cron: '0 0,1,2,3,4,5,6,7,8,9 * * *'
+    workflow_dispatch:
 
 concurrency:
   group: luckywatch-claim
