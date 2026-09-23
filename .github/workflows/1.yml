@@ -2,15 +2,9 @@ name: LuckyWatch
 
 on:
   schedule:
-    # UTC. 5 menit offset biar gak rebutan slot sama workflow lain
-    - cron: '5 0 * * *'    # 07:05 WIB
-    - cron: '5 8 * * *'    # 15:05 WIB
-    - cron: '5 16 * * *'   # 23:05 WIB
+    # UTC. 10 run mulai 22:00 UTC (= 05:00 WIB) s/d 07:00 UTC (= 14:00 WIB)
+    - cron: '0 22,23,0,1,2,3,4,5,6,7 * * *'
   workflow_dispatch:
-    inputs:
-      time_budget_minutes:
-        description: 'Time budget (minutes)'
-        default: '210'
 
 concurrency:
   group: luckywatch-claim
@@ -19,7 +13,7 @@ concurrency:
 jobs:
   claim:
     runs-on: ubuntu-latest
-    timeout-minutes: 240   # 4h hard cap; bot exit sendiri di 3.5h
+    timeout-minutes: 55   # failsafe, cron berikutnya 1 jam kemudian
 
     steps:
       - uses: actions/checkout@v4
@@ -27,7 +21,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-
 
       - name: Install deps
         run: pip install requests
