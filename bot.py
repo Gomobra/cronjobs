@@ -8,7 +8,7 @@ URL           = "https://luckywatch.pro/api/macros/tasks/"
 DASHBOARD_URL = "https://luckywatch.pro/api/macros/dashboard/"
 CAPTCHA_HASH  = "df00e07a0ea0decc7439d0e3effdc5c4"
 
-DAILY_LIMIT  = 850
+DAILY_LIMIT  = 830
 HOURLY_LIMIT = 80
 RUN_TARGET   = 85
 TIME_BUDGET  = 3300
