@@ -2,7 +2,6 @@ name: LuckyWatch
 
 on:
   schedule:
-    # 12 run, tiap jam, mulai 00:00 UTC (= 07:00 WIB) s/d 11:00 UTC (= 18:00 WIB)
     - cron: '0 0,1,2,3,4,5,6,7,8,9,10,11 * * *'
   workflow_dispatch:
 
@@ -13,7 +12,7 @@ concurrency:
 jobs:
   claim:
     runs-on: ubuntu-latest
-    timeout-minutes: 58   # failsafe, cron berikutnya 1 jam kemudian
+    timeout-minutes: 58
 
     steps:
       - uses: actions/checkout@v4
